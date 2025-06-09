@@ -1,42 +1,49 @@
 const mongoose = require('mongoose');
-const bcrypt = require('bcryptjs');
+const bcrypt = require('bcrypt');
 
-const UserSchema = new mongoose.Schema({
-    username: { type: String, required: true, unique: true },
-    email: { type: String, required: true, unique: true },
-    password: { type: String, required: true },
-    roles: [{ type: String, enum: ['admin', 'coordinador', 'auxiliar'] }]
+const userSchema = new mongoose.Schema({
+    username: { 
+        type: String, 
+        required: true, 
+        unique: true,
+        trim: true 
+    },
+    email: { 
+        type: String, 
+        required: true, 
+        unique: true,
+        lowercase: true,
+        trim: true,
+        match: [/\S+@\S+\.\S+/, 'El correo no es válido']
+    },
+    password: { 
+        type: String, 
+        required: true,
+        minlength: 6,
+        select: false
+    },
+    role: {
+        type: String,
+        enum: ['admin', 'coordinador', 'auxiliar'],
+        default: 'auxiliar'
+    },
 }, {
     timestamps: true,
-    versionKey: false,
-    toJSON: { virtuals: true },
-    toObject: { virtuals: true }
+    versionKey: false
 });
 
-// Hook pre-save
-UserSchema.pre('save', async function (next) {
-    // Solo hashear la contraseña si ha sido modificada
-    if (!this.isModified('password')) return next(); // Pasar a next() solo si no se modificó la contraseña
+// Encriptar contraseña antes de guardar
+userSchema.pre('save', async function(next) {
+    if (!this.isModified('password')) return next();
 
     try {
-        console.log('Contraseña antes de hashear: ', this.password);
-        // Generar salt
-        const salt = await bcrypt.genSalt(12);
-        // Hashear la contraseña
+        const salt = await bcrypt.genSalt(10);
         this.password = await bcrypt.hash(this.password, salt);
-        console.log('Contraseña hasheada: ', this.password);
-        
-        // Después de hashear la contraseña, pasar al siguiente middleware
         next();
-    } catch (err) {
-        console.error('Error al hashear: ', err);
-        next(err); // Pasar el error al siguiente middleware en caso de fallo
+
+    } catch (error) {
+        next(error);
     }
 });
 
-// Método para comparar contraseñas
-UserSchema.methods.comparePassword = async function (candidatePassword) {
-    return await bcrypt.compare(candidatePassword, this.password);
-};
-
-module.exports = mongoose.model('User', UserSchema);
+module.exports = mongoose.model('User', userSchema);

@@ -1,82 +1,48 @@
 const jwt = require('jsonwebtoken');
 const config = require('../config/auth.config');
-const db = require('../models/User');
-const User = db.user;
+//const { User } = require('../models/User');
 
-verifyToken = (req, res, next) => {
-    let token = req.headers['x-access-token']
+// Verificación del middleware
+const verifyTokenFn = (req, res, next) => {
+    console.log('\n[AuthJWT] Middleware ejecutandose para: ', req.originalUrl);
 
-    if (!token) {
-        return res.status(403).send({message: 'No se proporciono token'});
-    }
-
-    jwt.verify(token, config.secret, (err, decoded) => {
-        if (err) {
-            return res.status(401).send({message: 'No autorizado'});
+    try {
+        const token = req.headers['x-access-token'] || req.headers.authorization?.split(' ')[1];
+        
+        // Verifica que haya un token en el encabezado
+        if (!token) {
+            console.log('[AuthJWT] Error: Token no proporcionado');
+            return res.status(403).json({
+                success: false,
+                message: 'Token no proporcionado'
+            });
         }
-        req.userId = decoded;
+
+        // Verifica el token usando el secreto de la configuración
+        const decoded = jwt.verify(token, config.secret);
+        req.userId = decoded.id;
+        req.userRole = decoded.role;
+        
+        // Log de depuración (con menos detalles sensibles)
+        console.log('[AuthJWT] Token valido para: ', decoded.email);
         next();
-    });
+    } catch (error) {
+        // Error si el token no es válido
+        console.log('[AuthJWT] Error: ', error.name, '_', error.message);
+        return res.status(401).json({
+            success: false,
+            message: 'Token invalido',
+            error: error.name
+        });
+    }
 };
 
-isAdmin = (req, res, next) =>{
-    User.findById(req.userId).exec((err, user) =>{
-        if (err) {
-            res.status(500).send({message: err});
-            return;
-        }
-
-        if(user.roles.includes('admin')){
-            next();
-            return;
-        }
-
-        res.status(403).send({message: 'Requiere rol de admin'});
-    })
-};
-
-isCoordinador = (req, res, next) => {
-    User.findById(req.userId).exec((err, user) => {
-        if (err){
-            res.status(500).send({message: err});
-            return;
-        }
-
-        if (user.roles.includes('coordinador')){
-            next();
-            return;
-        }
-
-        res.status(403).send({message: 'Requiere rol de coordinador'});
-    });
-};
-
-isAuxiliar = (req, res, next) => {
-    User.findById(req.userId).exec((err, user) => {
-        if (err){
-            res.status(500).send({message: err});
-            return;
-        }
-
-        if (user.roles.includes('auxiliar')){
-            next();
-            return;
-        }
-
-        res.status(403).send({message: 'Requiere rol de auxiliar'});
-    });
-};
-
-const authJwt = {
-    verifyToken,
-    isAdmin,
-    isCoordinador,
-    isAuxiliar
-};
+// Verifica que `verifyTokenFn` sea una función válida
+if (typeof verifyTokenFn !== 'function') {
+    console.error('[AuthJWT] ERROR: verifyTokenFn no es una función');
+    throw new Error('verifyTokenFn debe ser una función');
+}
 
 module.exports = {
-    verifyToken,
-    isAdmin,
-    isCoordinador,
-    isAuxiliar
+    verifyToken: verifyTokenFn
 };
